@@ -2,13 +2,12 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
 	"strings"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 const ChartFile = "Chart.yaml"
@@ -36,33 +35,52 @@ type Chart struct {
 	Deprecated   bool     `yaml:"deprecated"`
 }
 
+func setOutput(name, value string) {
+	// Use GITHUB_OUTPUT file for modern GitHub Actions
+	githubOutput := os.Getenv("GITHUB_OUTPUT")
+	if githubOutput != "" {
+		f, err := os.OpenFile(githubOutput, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			log.Printf("Warning: could not open GITHUB_OUTPUT: %v", err)
+			// Fallback to deprecated method
+			fmt.Printf("::set-output name=%s::%s\n", name, value)
+			return
+		}
+		defer f.Close()
+		fmt.Fprintf(f, "%s=%s\n", name, value)
+	} else {
+		// Fallback to deprecated method for backward compatibility
+		fmt.Printf("::set-output name=%s::%s\n", name, value)
+	}
+}
+
 func main() {
 	chartPath := path.Join(os.Getenv("INPUT_PATH"), ChartFile)
-	fmt.Println(fmt.Sprintf(`Reading values from %s`, chartPath))
+	fmt.Printf("Reading values from %s\n", chartPath)
 
-	dat, readErr := ioutil.ReadFile(chartPath)
+	dat, readErr := os.ReadFile(chartPath)
 	check(readErr)
 
 	chart := Chart{}
-	yamlErr := yaml.Unmarshal([]byte(dat), &chart)
+	yamlErr := yaml.Unmarshal(dat, &chart)
 	check(yamlErr)
 
-	fmt.Println(fmt.Sprintf(`::set-output name=apiVersion::%s`, chart.ApiVersion))
-	fmt.Println(fmt.Sprintf(`::set-output name=name::%s`, chart.Name))
-	fmt.Println(fmt.Sprintf(`::set-output name=version::%s`, chart.Version))
-	fmt.Println(fmt.Sprintf(`::set-output name=kubeVersion::%s`, chart.KubeVersion))
-	fmt.Println(fmt.Sprintf(`::set-output name=description::%s`, chart.Description))
-	fmt.Println(fmt.Sprintf(`::set-output name=type::%s`, chart.Type))
-	fmt.Println(fmt.Sprintf(`::set-output name=keywords::%s`, chart.Keywords))
-	fmt.Println(fmt.Sprintf(`::set-output name=home::%s`, chart.Home))
-	fmt.Println(fmt.Sprintf(`::set-output name=sources::%s`, strings.Join(chart.Sources[:], ",")))
-	fmt.Println(fmt.Sprintf(`::set-output name=repository::%s`, chart.Repository))
-	fmt.Println(fmt.Sprintf(`::set-output name=icon::%s`, chart.Icon))
-	fmt.Println(fmt.Sprintf(`::set-output name=appVersion::%s`, chart.AppVersion))
-	fmt.Println(fmt.Sprintf(`::set-output name=deprecated::%t`, chart.Deprecated))
+	setOutput("apiVersion", chart.ApiVersion)
+	setOutput("name", chart.Name)
+	setOutput("version", chart.Version)
+	setOutput("kubeVersion", chart.KubeVersion)
+	setOutput("description", chart.Description)
+	setOutput("type", chart.Type)
+	setOutput("keywords", strings.Join(chart.Keywords, ","))
+	setOutput("home", chart.Home)
+	setOutput("sources", strings.Join(chart.Sources, ","))
+	setOutput("repository", chart.Repository)
+	setOutput("icon", chart.Icon)
+	setOutput("appVersion", chart.AppVersion)
+	setOutput("deprecated", fmt.Sprintf("%t", chart.Deprecated))
 
 	for _, dep := range chart.Dependencies {
-		fmt.Println(fmt.Sprintf(`::set-output name=dependencies_%s_version::%s`, dep.Name, dep.Version))
-		fmt.Println(fmt.Sprintf(`::set-output name=dependencies_%s_repository::%s`, dep.Name, dep.Repository))
+		setOutput(fmt.Sprintf("dependencies_%s_version", dep.Name), dep.Version)
+		setOutput(fmt.Sprintf("dependencies_%s_repository", dep.Name), dep.Repository)
 	}
 }

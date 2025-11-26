@@ -1,9 +1,10 @@
-FROM golang:1.13 as builder
+FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
-COPY . /app
+COPY go.mod go.sum ./
+RUN go mod download
 
-RUN go get -d -v
+COPY . .
 
 # Statically compile our app for use in a distroless container
 RUN CGO_ENABLED=0 go build -ldflags="-w -s" -v -o app .
